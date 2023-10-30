@@ -27,6 +27,14 @@
   - 单继承，是‘is-a’
   - 接口是多继承的，是‘has-a’
 
+### 接口类中可以写具体的方法吗？
+
+可以！
+
+在JDK8之后，引入了默认方法（default methods）和静态方法（static methods），允许在接口中包含具体的方法实现，可以被接口的类继承或直接调用。
+
+
+
 ### instanceof
 
 用来测试一个对象是否是一个类的实例。
@@ -916,6 +924,14 @@ ip层传上来的包可能乱序，tcp层会将其重排在发给应用层
   - 未创建，进入同步块，在检查一次
   - 仍然没有被创建，在同步块内创建实例
   - 关键代码：`volatile` 用来保证实例的可见性，以及确定指令重排， `synchronized` 确保只有一个线程进入创建实例的过程。
+  
+- 枚举模式实现
+
+  - 在一个枚举类中有一个枚举实例
+  - 非常安全and简单
+  - 不需要传统的双检索or静态内部类来实现
+
+  
 
 ### 代理模式
 
@@ -927,6 +943,146 @@ ip层传上来的包可能乱序，tcp层会将其重排在发给应用层
 - 缺点
   - 提高了代码复杂度
   - 性能下降
+
+java中使用代理模式的实例
+
+- **javabean** 可以使用动态代理，某一个javabean可以对其他bean的注册事件有动作，在事件发生时调用代理方法来响应事件。
+- **AOP** SpringAOP 使用代理模式来实现横切关注点的分离，使得在不修改源码的情况下增加横切关注点，如日志，事务管理等。
+- **Servlet** 代理模式拦截HTTP请求和响应，执行预处理和完成后的处理操作。如身份验证，日志记录等。
+
+#### 展开说说代理
+
+当然，肯定是分为静态代理和动态代理。
+
+首先来一个基础的东西做测试，一个简单的类和他的实现类。
+
+~~~java
+public interface Calculator {
+    int add(int a,int b);
+}
+~~~
+
+~~~java
+public class CalculatorImpl implements Calculator{
+    @Override
+    public int add(int a, int b) {
+        return a + b;
+    }
+}
+~~~
+
+##### 静态代理
+
+~~~java
+public class CalculatorProxy implements Calculator{
+    private Calculator calculator;
+    public CalculatorProxy(Calculator calculator){
+        this.calculator = calculator;
+    }
+
+    @Override
+    public int add(int a, int b) {
+        System.out.println("Calling method add");
+        int result = calculator.add(a, b);
+        System.out.println("Method add returned " + result);
+        return result;
+    }
+
+
+    public static void main(String[] args) {
+        /*
+        * 静态代理的实现
+        * */
+        Calculator realCalculator = new CalculatorImpl();
+        CalculatorProxy calculatorProxy = new CalculatorProxy(realCalculator);
+        int result = calculatorProxy.add(5, 3);
+        calculatorProxy.sub(5,3);
+        System.out.println("Result: " + result);
+    }
+}
+~~~
+
+其实挺好理解的，就是创建了一个类，在原先的add方法上“环绕”了两个print
+
+##### 动态代理：
+
+~~~java
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
+
+public class LoggingHandler implements InvocationHandler {
+    private Object object;
+    public LoggingHandler(Object object){
+        this.object = object;
+    }
+
+    @Override
+    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+        System.out.println("Calling method " + method.getName());
+        int result = (int) method.invoke(object, args);
+        System.out.println("Method " + method.getName() + " returned " + result);
+        return result;
+    }
+
+    public static void main(String[] args) {
+        Calculator calculator = new CalculatorImpl();
+        Calculator proxyCalculator = (Calculator) Proxy.newProxyInstance(
+                Calculator.class.getClassLoader(),
+                new Class[]{Calculator.class},
+                new LoggingHandler(calculator)
+        );
+        int result = proxyCalculator.add(6,3);
+        System.out.println("Result:" + result);
+    }
+}
+
+~~~
+
+做的事情其实也很简单，继承 `InvocationHandler` 接口，实现其中的invoke方法，对其中的method做一些额外操作。
+
+`psvm` 中的可以理解为，使用反射生成了一个代理实例，`Proxy.newProxyInstance` 方法，把参数拉进去，这个 `proxyCalculator` 就和普通创建出来的一样了。
+
+##### 好在哪
+
+现在我向最原始的接口类中加入一个新方法：
+
+Calculator：
+
+~~~java
+    int sub(int a,int b);
+~~~
+
+CalculatorImpl：
+
+~~~java
+    @Override
+    public int sub(int a, int b) {
+        return a - b;
+    }
+~~~
+
+现在对静态代理和动态代理在其中修改实现。
+
+**静态代理** 需要新实现一个接口，
+
+~~~java
+    @Override
+    public int sub(int a, int b) {
+        System.out.println("Calling method sub");
+        int result = calculator.add(a, b);
+        System.out.println("Method sub returned " + result);
+        return result;
+    }
+~~~
+
+然后可以在 `psvm` 中展示出来。
+
+**动态代理** 无需增加任何方法！
+
+换言之，这个新增的方法已经实现了对他的代理，现在在 `psvm` 中，可以直接 `int res = proxyCalculator.sub(5,2);` 而不报错。并且运行也正常。
+
+
 
 ### 工厂模式
 
